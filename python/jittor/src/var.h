@@ -27,6 +27,7 @@ struct Var : Node {
     size_t allocation;
     int64 size, num;
     VarHolder* holder = nullptr;
+    int priority = 0;
     inline bool is_float() const { CHECK_EXIST; return ns.is_float(); }
     inline int dsize() const { CHECK_EXIST; return ns.dsize(); }
     inline NanoString dtype() const { CHECK_EXIST; return ns; }
@@ -38,6 +39,7 @@ struct Var : Node {
     inline Caster<Node::var_output_t, Node::output_t> outputs_with_index() { CHECK_EXIST; return &_outputs; }
     inline Op* input(uint i) { return Node::input(i)->op(); }
     inline Op* output(uint i) { return Node::output(i)->op(); }
+    inline void set_priority(int p) { priority = p; }
 
     Var(NanoVector shape, NanoString dtype);
 

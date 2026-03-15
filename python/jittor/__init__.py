@@ -27,7 +27,8 @@ with lock.lock_scope():
     if core.get_device_count() == 0:
         has_cuda = compile_extern.has_cuda = compiler.has_cuda = False
     from .compile_extern import cudnn, curand, cublas, cufft, cusparse
-    from .init_cupy import numpy2cupy
+from .init_cupy import numpy2cupy
+from .priority_decorator import PriorityDecorator, lfu_decorator, lfu
 
 from typing import List, Tuple
 import contextlib

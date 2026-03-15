@@ -85,6 +85,7 @@ extern int64 swap_total;
 
 DECLARE_FLAG(int64, cpu_mem_limit);
 DECLARE_FLAG(int64, device_mem_limit);
+DECLARE_FLAG(int, use_custom_priority);
 
 bool alloc_with_swap(Var* x, Allocator* allocator, bool force);
 void free_with_swap(Var* x);

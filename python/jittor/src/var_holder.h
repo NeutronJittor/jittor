@@ -342,6 +342,24 @@ struct VarHolder {
     // @pyjt(debug_msg)
     string debug_msg();
 
+    /**
+     * set the priority of the Var for offload.
+     */
+    // @pyjt(set_priority)
+    // @attrs(return_self)
+    inline VarHolder* set_priority(int p) {
+        var->set_priority(p);
+        return this;
+    }
+
+    /**
+     * get the priority of the Var.
+     */
+    // @pyjt(get_priority)
+    inline int get_priority() {
+        return var->priority;
+    }
+
     /* Jittor Var doesn't have this interface, please change your code as below::
 
     model = Model()

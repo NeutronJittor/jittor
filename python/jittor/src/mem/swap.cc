@@ -17,6 +17,7 @@
 #include "var.h"
 #include "mem/swap.h"
 #include "mem/mem_info.h"
+#include <algorithm>
 
 namespace jittor {
 
@@ -28,6 +29,7 @@ static int _pid = getpid();
 
 DEFINE_FLAG(int64, cpu_mem_limit, -1, "cpu_mem_limit");
 DEFINE_FLAG(int64, device_mem_limit, -1, "device_mem_limit");
+DEFINE_FLAG(int, use_custom_priority, 0, "use custom priority for var offload");
 
 struct Swap {
     map<pair<int64,int64>, Var*> lived;
@@ -89,14 +91,32 @@ bool alloc_with_swap(Var* x, Allocator* allocator, bool force) {
     if (allocator->used_memory + allocator->unused_memory + x->size > limit)
         allocator->gc();
     if (force && allocator->used_memory + allocator->unused_memory + x->size > limit) {
-        auto iter = swap.lived.upper_bound({x->size, -1});
         auto unused_target = allocator->unused_memory + x->size;
-        while (iter != swap.lived.end()) {
-            auto* var = iter->second;
-            iter++;
-            if (var->tflag == swap_timestamp)
-                continue;
-            ASSERT(var->mem_ptr) << var->exist() << (void*)var << iter->first << (display_memory_info(), 1);
+        
+        // Collect all removable variables
+        vector<Var*> candidates;
+        for (auto& pair : swap.lived) {
+            Var* var = pair.second;
+            if (var->tflag != swap_timestamp && var->mem_ptr) {
+                candidates.push_back(var);
+            }
+        }
+        
+        // Sort by priority or timestamp
+        if (use_custom_priority) {
+            // Use custom priority, lower priority first
+            sort(candidates.begin(), candidates.end(), [](Var* a, Var* b) {
+                return a->priority < b->priority;
+            });
+        } else {
+            // Use default timestamp, older timestamp first
+            sort(candidates.begin(), candidates.end(), [](Var* a, Var* b) {
+                return a->tflag < b->tflag;
+            });
+        }
+        
+        // Remove variables until there is enough space
+        for (Var* var : candidates) {
             if (!is_cpu) {
                 // try move to cpu
                 if (!move_with_swap(var, cpu_allocator, false))
@@ -105,29 +125,10 @@ bool alloc_with_swap(Var* x, Allocator* allocator, bool force) {
                 swap_to_disk(var, swap);
             if (allocator->used_memory + allocator->unused_memory + x->size <= limit || allocator->unused_memory >= unused_target) break;
         }
-        // if still no space, swap other smaller var
+        
         if (!(allocator->used_memory + allocator->unused_memory + x->size <= limit || allocator->unused_memory >= unused_target)) {
-            auto iter = swap.lived.end();
-            if (swap.lived.size()) iter = std::prev(iter);
-            while (iter != swap.lived.end()) {
-                auto var = iter->second;
-                iter = iter==swap.lived.begin() ? swap.lived.end() : std::prev(iter);
-                if (var->tflag == swap_timestamp)
-                    continue;
-                ASSERT(var->mem_ptr) << x << var;
-                if (!is_cpu) {
-                    // try move to cpu
-                    if (!move_with_swap(var, cpu_allocator, false))
-                        swap_to_disk(var, swap);
-                } else
-                    swap_to_disk(var, swap);
-                allocator->gc();
-                if (allocator->used_memory + allocator->unused_memory + x->size <= limit || allocator->unused_memory >= unused_target) break;
-            }
-            if (!(allocator->used_memory + allocator->unused_memory + x->size <= limit || allocator->unused_memory >= unused_target)) {
-                display_memory_info();
-                LOGw << "unable to alloc var" << x;
-            }
+            display_memory_info();
+            LOGw << "unable to alloc var" << x;
         }
     }
     if (x->alloc(allocator)) {
